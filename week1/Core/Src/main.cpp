@@ -22,10 +22,36 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include <functional>
+#include "stm32f4xx_ll_gpio.h"
+#include "stm32f4xx_ll_exti.h"
+std::function<void()> onButtonPressCallback;
+
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+
+class Led {
+private:
+    GPIO_TypeDef* port;
+    uint16_t pin;
+
+public:
+    Led(GPIO_TypeDef* p, uint16_t n) {
+        port = p;
+        pin = n;
+    }
+
+    void turnOn() {
+        HAL_GPIO_WritePin(port, pin, GPIO_PIN_SET);
+    }
+
+    void toggle() {
+        HAL_GPIO_TogglePin(port, pin);
+    }
+};
 
 /* USER CODE END PTD */
 
@@ -63,8 +89,7 @@ static void MX_USART2_UART_Init(void);
   * @brief  The application entry point.
   * @retval int
   */
-int main(void)
-{
+int main(void) {
 
   /* USER CODE BEGIN 1 */
 
@@ -91,21 +116,33 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
+      Led statusLed(GPIOA, GPIO_PIN_5);
+
+      statusLed.turnOn();
+
+      LL_GPIO_SetPinMode(GPIOC, LL_GPIO_PIN_13, LL_GPIO_MODE_INPUT);
+      LL_EXTI_EnableIT_0_31(LL_EXTI_LINE_13);
+      LL_EXTI_EnableFallingTrig_0_31(LL_EXTI_LINE_13);
+
+      NVIC_EnableIRQ(EXTI15_10_IRQn);
+
+      onButtonPressCallback = [&]() {
+    	  statusLed.toggle();
+      };
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-    /* USER CODE END WHILE */
-if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_RESET){
-	HAL_GPIO_TogglePin(GPIOA,GPIO_PIN_5);
-	HAL_Delay(500);
-}
+while (1)
+{
+
     /* USER CODE BEGIN 3 */
-  }
+
   /* USER CODE END 3 */
+	}
 }
+
 
 /**
   * @brief System Clock Configuration
@@ -226,6 +263,13 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+extern "C" void EXTI15_10_IRQHandler() {
+	if (onButtonPressCallback) {
+		onButtonPressCallback();
+	}
+	LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_13);
+}
 
 /* USER CODE END 4 */
 
