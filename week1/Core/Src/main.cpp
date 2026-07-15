@@ -25,8 +25,6 @@
 #include <functional>
 #include "stm32f4xx_ll_gpio.h"
 #include "stm32f4xx_ll_exti.h"
-std::function<void()> onButtonPressCallback;
-
 
 /* USER CODE END Includes */
 
@@ -40,18 +38,54 @@ private:
 
 public:
     Led(GPIO_TypeDef* p, uint16_t n) {
-        port = p;
-        pin = n;
+    	port = p;
+    	pin = n;
     }
 
     void turnOn() {
-        HAL_GPIO_WritePin(port, pin, GPIO_PIN_SET);
+    	LL_GPIO_SetOutputPin (port, pin);
+    }
+
+    void turnOff (){
+    	LL_GPIO_ResetOutputPin (port, pin);
     }
 
     void toggle() {
-        HAL_GPIO_TogglePin(port, pin);
+    	LL_GPIO_TogglePin (port, pin);
     }
 };
+
+class Button {
+private:
+	GPIO_TypeDef* port;
+	uint16_t pin;
+	std::function<void()> callback;
+
+public:
+	Button(GPIO_TypeDef* p, uint16_t n){
+		port = p;
+		pin = n;
+
+		LL_GPIO_SetPinMode (port, pin, LL_GPIO_MODE_INPUT);
+		LL_EXTI_EnableIT_0_31 (pin);
+		LL_EXTI_EnableFallingTrig_0_31 (pin);
+		NVIC_EnableIRQ(EXTI15_10_IRQn);
+	}
+
+	void registerCallBack (std::function<void()> cb) {
+		callback = cb;
+	}
+
+	void handleinterrupt (){
+		if (callback) {
+			callback();
+		}
+	}
+
+
+};
+
+Button* globalButton = nullptr;
 
 /* USER CODE END PTD */
 
@@ -126,9 +160,13 @@ int main(void) {
 
       NVIC_EnableIRQ(EXTI15_10_IRQn);
 
-      onButtonPressCallback = [&]() {
+      Button statusButton (GPIOC, LL_GPIO_PIN_13);
+      globalButton = &statusButton;
+
+      statusButton.registerCallBack([&](){
     	  statusLed.toggle();
-      };
+      });
+
 
   /* USER CODE END 2 */
 
@@ -265,8 +303,8 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 extern "C" void EXTI15_10_IRQHandler() {
-	if (onButtonPressCallback) {
-		onButtonPressCallback();
+	if (globalButton) {
+		globalButton->handleinterrupt();
 	}
 	LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_13);
 }
