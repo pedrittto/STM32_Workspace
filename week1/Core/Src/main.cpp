@@ -31,61 +31,100 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
-class Led {
+
+enum class LedState {
+	On,
+	Off,
+	Blinking
+
+};
+
+class LedController {
 private:
-    GPIO_TypeDef* port;
-    uint16_t pin;
+	LedState currentState;
+	GPIO_TypeDef* port;
+	uint16_t pin;
+	uint32_t blinkCounter;
 
 public:
-    Led(GPIO_TypeDef* p, uint16_t n) {
-    	port = p;
-    	pin = n;
-    }
+	LedController (GPIO_TypeDef* p, uint16_t n){
+		port = p;
+		pin = n;
+		currentState = LedState::Off;
+		blinkCounter = 0;
+	}
 
-    void turnOn() {
-    	LL_GPIO_SetOutputPin (port, pin);
-    }
+	void changeState(){
+		switch (currentState){
 
-    void turnOff (){
-    	LL_GPIO_ResetOutputPin (port, pin);
-    }
+		case LedState::Off:
+			currentState = LedState::On;
+			break;
 
-    void toggle() {
-    	LL_GPIO_TogglePin (port, pin);
-    }
+		case LedState::On:
+			currentState = LedState::Blinking;
+			break;
+
+		case LedState::Blinking:
+			currentState = LedState::Off;
+			break;
+		}
+	}
+
+	void update(){
+		switch (currentState){
+
+		case LedState :: Off:
+			LL_GPIO_ResetOutputPin (port, pin);
+			break;
+
+		case LedState :: On:
+			LL_GPIO_SetOutputPin (port,pin);
+			break;
+
+		case LedState :: Blinking:
+			blinkCounter++;
+			if (blinkCounter >= 200000){
+				LL_GPIO_TogglePin (port,pin);
+				blinkCounter = 0;
+
+			}
+			break;
+
+		}
+	}
 };
 
 class Button {
 private:
-	GPIO_TypeDef* port;
-	uint16_t pin;
-	std::function<void()> callback;
+    GPIO_TypeDef* port;
+    uint16_t pin;
+    std::function<void()> callback;
 
 public:
-	Button(GPIO_TypeDef* p, uint16_t n){
-		port = p;
-		pin = n;
+    Button(GPIO_TypeDef* p, uint16_t n){
+        port = p;
+        pin = n;
 
-		LL_GPIO_SetPinMode (port, pin, LL_GPIO_MODE_INPUT);
-		LL_EXTI_EnableIT_0_31 (pin);
-		LL_EXTI_EnableFallingTrig_0_31 (pin);
-		NVIC_EnableIRQ(EXTI15_10_IRQn);
-	}
+        LL_GPIO_SetPinMode (port, pin, LL_GPIO_MODE_INPUT);
+        LL_EXTI_EnableIT_0_31 (pin);
+        LL_EXTI_EnableFallingTrig_0_31 (pin);
+        NVIC_EnableIRQ(EXTI15_10_IRQn);
+    }
 
-	void registerCallBack (std::function<void()> cb) {
-		callback = cb;
-	}
+    void registerCallBack (std::function<void()> cb) {
+            callback = cb;
+    }
 
-	void handleinterrupt (){
-		if (callback) {
-			callback();
-		}
-	}
-
-
+    void handleinterrupt () {
+            if (callback) {
+                callback();
+            }
+    }
 };
 
 Button* globalButton = nullptr;
+
 
 /* USER CODE END PTD */
 
@@ -150,22 +189,11 @@ int main(void) {
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
-      Led statusLed(GPIOA, GPIO_PIN_5);
+  LedController statusLed(GPIOA, GPIO_PIN_5);
 
-      statusLed.turnOn();
+  Button statusButton(GPIOC, LL_GPIO_PIN_13);
 
-      LL_GPIO_SetPinMode(GPIOC, LL_GPIO_PIN_13, LL_GPIO_MODE_INPUT);
-      LL_EXTI_EnableIT_0_31(LL_EXTI_LINE_13);
-      LL_EXTI_EnableFallingTrig_0_31(LL_EXTI_LINE_13);
-
-      NVIC_EnableIRQ(EXTI15_10_IRQn);
-
-      Button statusButton (GPIOC, LL_GPIO_PIN_13);
-      globalButton = &statusButton;
-
-      statusButton.registerCallBack([&](){
-    	  statusLed.toggle();
-      });
+  globalButton = &statusButton;
 
 
   /* USER CODE END 2 */
@@ -174,7 +202,11 @@ int main(void) {
   /* USER CODE BEGIN WHILE */
 while (1)
 {
+	statusLed.update();
 
+	statusButton.registerCallBack([&](){
+		statusLed.changeState();
+	});
     /* USER CODE BEGIN 3 */
 
   /* USER CODE END 3 */
